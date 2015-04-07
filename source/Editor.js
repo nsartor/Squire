@@ -652,6 +652,10 @@ proto._addFormat = function ( tag, attributes, range ) {
 
         do {
             textNode = walker.currentNode;
+            if (!textNode) {
+                continue;
+            }
+            
             needsFormat = !getNearest( textNode, tag, attributes );
             if ( needsFormat ) {
                 if ( textNode === endContainer &&

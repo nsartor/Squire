@@ -33,10 +33,11 @@ var forEachTextNodeInRange = function ( range, fn ) {
 
     var startContainer = range.startContainer,
         endContainer = range.endContainer,
-        root = range.commonAncestorContainer,
+        root = range.startContainer === range.endContainer ?
+            range.startContainer : range.commonAncestorContainer,
         walker = new TreeWalker(
-            root, SHOW_TEXT, function (/* node */) {
-                return true;
+            root, SHOW_TEXT, function ( node ) {
+                return isNodeContainedInRange( range, node, true );
         }, false ),
         textnode = walker.currentNode = startContainer;
 
