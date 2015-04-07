@@ -823,7 +823,7 @@ var insertTreeFragmentIntoRange = function ( range, frag ) {
         deleteContentsOfRange( range );
     }
 
-    // Move range down into text ndoes
+    // Move range down into text nodes
     moveRangeBoundariesDownTree( range );
 
     // If inline, just insert at the current position.
@@ -1754,8 +1754,12 @@ proto._addFormat = function ( tag, attributes, range ) {
         // Make sure we start inside a text node.
         walker.currentNode = startContainer;
         if ( startContainer.nodeType !== TEXT_NODE ) {
-            startContainer = walker.nextNode();
-            startOffset = 0;
+            var nextNode = walker.nextNode();
+
+            if ( nextNode ) {
+                startContainer = nextNode;
+                startOffset = 0;
+            }
         }
 
         do {
