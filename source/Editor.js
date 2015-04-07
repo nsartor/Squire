@@ -644,8 +644,12 @@ proto._addFormat = function ( tag, attributes, range ) {
         // Make sure we start inside a text node.
         walker.currentNode = startContainer;
         if ( startContainer.nodeType !== TEXT_NODE ) {
-            startContainer = walker.nextNode();
-            startOffset = 0;
+            var nextNode = walker.nextNode();
+
+            if ( nextNode ) {
+                startContainer = nextNode;
+                startOffset = 0;
+            }
         }
 
         do {
