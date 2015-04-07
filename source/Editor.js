@@ -353,9 +353,7 @@ proto._updatePath = function ( range, force ) {
             this.fireEvent( 'pathChange', { path: newPath } );
         }
     }
-    if ( !range.collapsed ) {
-        this.fireEvent( 'select' );
-    }
+    this.fireEvent( 'select' );
 };
 
 proto._updatePathOnEvent = function () {
@@ -652,7 +650,7 @@ proto._addFormat = function ( tag, attributes, range ) {
 
         do {
             textNode = walker.currentNode;
-            if (!textNode) {
+            if ( !textNode ) {
                 continue;
             }
             

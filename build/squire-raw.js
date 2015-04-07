@@ -617,10 +617,11 @@ var forEachTextNodeInRange = function ( range, fn ) {
 
     var startContainer = range.startContainer,
         endContainer = range.endContainer,
-        root = range.commonAncestorContainer,
+        root = range.startContainer === range.endContainer ?
+            range.startContainer : range.commonAncestorContainer,
         walker = new TreeWalker(
-            root, SHOW_TEXT, function (/* node */) {
-                return true;
+            root, SHOW_TEXT, function ( node ) {
+                return isNodeContainedInRange( range, node, true );
         }, false ),
         textnode = walker.currentNode = startContainer;
 
@@ -1443,9 +1444,7 @@ proto._updatePath = function ( range, force ) {
             this.fireEvent( 'pathChange', { path: newPath } );
         }
     }
-    if ( !range.collapsed ) {
-        this.fireEvent( 'select' );
-    }
+    this.fireEvent( 'select' );
 };
 
 proto._updatePathOnEvent = function () {
@@ -1742,6 +1741,10 @@ proto._addFormat = function ( tag, attributes, range ) {
 
         do {
             textNode = walker.currentNode;
+            if ( !textNode ) {
+                continue;
+            }
+            
             needsFormat = !getNearest( textNode, tag, attributes );
             if ( needsFormat ) {
                 if ( textNode === endContainer &&
@@ -2557,17 +2560,7 @@ var cleanupBRs = function ( root ) {
 
 proto._ensureBottomLine = function () {
     var body = this._body,
-        last;
-    // Safari (+others?) adds white-space text nodes to the end of <body>
-    // for no apparent reason. Remove them, since they're semantically
-    // meaningless.
-    while ( last = body.lastChild ) {
-        if ( last.nodeType === TEXT_NODE && !notWS.test( last.data ) ) {
-            body.removeChild( last );
-        } else {
-            break;
-        }
-    }
+        last = body.lastElementChild;
     if ( !last || last.nodeName !== this.defaultBlockTag || !isBlock( last ) ) {
         body.appendChild( this.createDefaultBlock() );
     }
