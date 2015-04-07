@@ -197,7 +197,7 @@ var deleteContentsOfRange = function ( range ) {
     // Ensure body has a block-level element in it.
     var body = range.endContainer.ownerDocument.body,
         child = body.firstChild;
-    if ( !child || child.nodeName === 'BR' ) {
+    if ( !child || child.nodeName === 'BR' || child.nodeName === 'WBR' ) {
         fixCursor( body );
         range.selectNodeContents( body.firstChild );
     }
@@ -245,13 +245,15 @@ var insertTreeFragmentIntoRange = function ( range, frag ) {
 
         while ( ( child = startContainer.lastChild ) &&
                 child.nodeType === ELEMENT_NODE &&
-                child.nodeName !== 'BR' ) {
+                child.nodeName !== 'BR'  &&
+                child.nodeName !== 'WBR' ) {
             startContainer = child;
             startOffset = startContainer.childNodes.length;
         }
         while ( ( child = endContainer.firstChild ) &&
                 child.nodeType === ELEMENT_NODE &&
-                child.nodeName !== 'BR' ) {
+                child.nodeName !== 'BR'  &&
+                child.nodeName !== 'WBR' ) {
             endContainer = child;
         }
         while ( ( child = frag.firstChild ) && isInline( child ) ) {
