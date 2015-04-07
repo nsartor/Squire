@@ -162,12 +162,14 @@ function fixCursor ( node ) {
     // cursor to appear.
     var doc = node.ownerDocument,
         root = node,
-        fixer, child,
-        l, instance;
+        fixer, child, instance;
 
     if ( node.nodeName === 'BODY' ) {
         if ( !( child = node.firstChild ) || child.nodeName === 'BR' ) {
-            fixer = doc.createElement( 'DIV' );
+            instance = getSquireInstance ( doc );
+            fixer = instance ?
+                instance.createDefaultBlock() :
+                createElement( doc, 'DIV' );
             if ( child ) {
                 node.replaceChild( fixer, child );
             }
@@ -189,14 +191,7 @@ function fixCursor ( node ) {
         if ( !child ) {
             if ( cantFocusEmptyTextNodes ) {
                 fixer = doc.createTextNode( ZWS );
-                // Find the relevant Squire instance and notify
-                l = instances.length;
-                while ( l-- ) {
-                    instance = instances[l];
-                    if ( instance._doc === doc ) {
-                        instance._didAddZWS();
-                    }
-                }
+                getSquireInstance ( doc )._didAddZWS();
             } else {
                 fixer = doc.createTextNode( '' );
             }
@@ -205,7 +200,7 @@ function fixCursor ( node ) {
         if ( useTextFixer ) {
             if ( useNonEmptyFixer ) {
                 if ( !node.querySelector( 'WBR' ) ) {
-                    fixer = doc.createElement( 'WBR' );
+                    fixer = createElement( doc, 'WBR' );
                     while ( ( child = node.lastElementChild ) && !isInline( child ) ) {
                         node = child;
                     }
@@ -231,7 +226,7 @@ function fixCursor ( node ) {
             }
         }
         else if ( !node.querySelector( 'BR' ) ) {
-            fixer = doc.createElement( 'BR' );
+            fixer = createElement( doc, 'BR' );
             while ( ( child = node.lastElementChild ) && !isInline( child ) ) {
                 node = child;
             }
