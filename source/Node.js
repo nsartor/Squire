@@ -6,7 +6,8 @@ var leafNodeNames = {
     BR: 1,
     HR: 1,
     IMG: 1,
-    INPUT: 1
+    INPUT: 1,
+    WBR: 1
 };
 
 function every ( nodeList, fn ) {
@@ -161,14 +162,12 @@ function fixCursor ( node ) {
     // cursor to appear.
     var doc = node.ownerDocument,
         root = node,
-        fixer, child, instance;
+        fixer, child,
+        l, instance;
 
     if ( node.nodeName === 'BODY' ) {
         if ( !( child = node.firstChild ) || child.nodeName === 'BR' ) {
-            instance = getSquireInstance( doc );
-            fixer = instance ?
-                instance.createDefaultBlock() :
-                createElement( doc, 'DIV' );
+            fixer = doc.createElement( 'DIV' );
             if ( child ) {
                 node.replaceChild( fixer, child );
             }
@@ -190,33 +189,49 @@ function fixCursor ( node ) {
         if ( !child ) {
             if ( cantFocusEmptyTextNodes ) {
                 fixer = doc.createTextNode( ZWS );
-                getSquireInstance( doc )._didAddZWS();
+                // Find the relevant Squire instance and notify
+                l = instances.length;
+                while ( l-- ) {
+                    instance = instances[l];
+                    if ( instance._doc === doc ) {
+                        instance._didAddZWS();
+                    }
+                }
             } else {
                 fixer = doc.createTextNode( '' );
             }
         }
     } else {
         if ( useTextFixer ) {
-            while ( node.nodeType !== TEXT_NODE && !isLeaf( node ) ) {
-                child = node.firstChild;
-                if ( !child ) {
-                    fixer = doc.createTextNode( '' );
-                    break;
+            if ( useNonEmptyFixer ) {
+                if ( !node.querySelector( 'WBR' ) ) {
+                    fixer = doc.createElement( 'WBR' );
+                    while ( ( child = node.lastElementChild ) && !isInline( child ) ) {
+                        node = child;
+                    }
                 }
-                node = child;
-            }
-            if ( node.nodeType === TEXT_NODE ) {
-                // Opera will collapse the block element if it contains
-                // just spaces (but not if it contains no data at all).
-                if ( /^ +$/.test( node.data ) ) {
-                    node.data = '';
+            } else {
+                while ( node.nodeType !== TEXT_NODE && !isLeaf( node ) ) {
+                    child = node.firstChild;
+                    if ( !child ) {
+                        fixer = doc.createTextNode( '' );
+                        break;
+                    }
+                    node = child;
                 }
-            } else if ( isLeaf( node ) ) {
-                node.parentNode.insertBefore( doc.createTextNode( '' ), node );
+                if ( node.nodeType === TEXT_NODE ) {
+                    // Opera will collapse the block element if it contains
+                    // just spaces (but not if it contains no data at all).
+                    if ( /^ +$/.test( node.data ) ) {
+                        node.data = '';
+                    }
+                } else if ( isLeaf( node ) ) {
+                    node.parentNode.insertBefore( doc.createTextNode( '' ), node );
+                }
             }
         }
         else if ( !node.querySelector( 'BR' ) ) {
-            fixer = createElement( doc, 'BR' );
+            fixer = doc.createElement( 'BR' );
             while ( ( child = node.lastElementChild ) && !isInline( child ) ) {
                 node = child;
             }
@@ -385,7 +400,7 @@ function mergeWithBlock ( block, next, range ) {
 
     // Remove extra <BR> fixer if present.
     last = block.lastChild;
-    if ( last && last.nodeName === 'BR' ) {
+    if ( last && last.nodeName === 'BR' || last.nodeName === 'WBR' ) {
         block.removeChild( last );
         offset -= 1;
     }
