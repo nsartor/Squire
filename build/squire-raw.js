@@ -623,44 +623,6 @@ var getNodeAfter = function ( node, offset ) {
 
 // ---
 
-var forEachTextNodeInRange = function ( range, fn ) {
-    range = range.cloneRange();
-    moveRangeBoundariesDownTree( range );
-
-    var startContainer = range.startContainer,
-        endContainer = range.endContainer,
-        root = range.startContainer === range.endContainer ?
-            range.startContainer : range.commonAncestorContainer,
-        walker = new TreeWalker(
-            root, SHOW_TEXT, function ( node ) {
-                return isNodeContainedInRange( range, node, true );
-        }, false ),
-        textnode = walker.currentNode = startContainer;
-
-    while ( !fn( textnode, range ) &&
-        textnode !== endContainer &&
-        ( textnode = walker.nextNode() ) ) {}
-};
-
-var getTextContentInRange = function ( range ) {
-    var textContent = '';
-    forEachTextNodeInRange( range, function ( textnode, range ) {
-        var value = textnode.data;
-        if ( value && ( /\S/.test( value ) ) ) {
-            if ( textnode === range.endContainer ) {
-                value = value.slice( 0, range.endOffset );
-            }
-            if ( textnode === range.startContainer ) {
-                value = value.slice( range.startOffset );
-            }
-            textContent += value;
-        }
-    });
-    return textContent;
-};
-
-// ---
-
 var insertNodeInRange = function ( range, node ) {
     // Insert at start.
     var startContainer = range.startContainer,
@@ -1407,7 +1369,47 @@ proto.getSelection = function () {
 };
 
 proto.getSelectedText = function () {
-    return getTextContentInRange( this.getSelection() );
+    var range = this.getSelection(),
+        walker = new TreeWalker(
+            range.commonAncestorContainer,
+            SHOW_TEXT|SHOW_ELEMENT,
+            function ( node ) {
+                return isNodeContainedInRange( range, node, true );
+            }
+        ),
+        startContainer = range.startContainer,
+        endContainer = range.endContainer,
+        node = walker.currentNode = startContainer,
+        textContent = '',
+        addedTextInBlock = false,
+        value;
+
+    if ( !walker.filter( node ) ) {
+        node = walker.nextNode();
+    }
+
+    while ( node ) {
+        if ( node.nodeType === TEXT_NODE ) {
+            value = node.data;
+            if ( value && ( /\S/.test( value ) ) ) {
+                if ( node === endContainer ) {
+                    value = value.slice( 0, range.endOffset );
+                }
+                if ( node === startContainer ) {
+                    value = value.slice( range.startOffset );
+                }
+                textContent += value;
+                addedTextInBlock = true;
+            }
+        } else if ( node.nodeName === 'BR' ||
+                addedTextInBlock && !isInline( node ) ) {
+            textContent += '\n';
+            addedTextInBlock = false;
+        }
+        node = walker.nextNode();
+    }
+
+    return textContent;
 };
 
 proto.getPath = function () {
@@ -1422,10 +1424,19 @@ var removeZWS = function ( root ) {
     var walker = new TreeWalker( root, SHOW_TEXT, function () {
             return true;
         }, false ),
-        node, index;
+        parent, node, index;
     while ( node = walker.nextNode() ) {
         while ( ( index = node.data.indexOf( ZWS ) ) > -1 ) {
-            node.deleteData( index, 1 );
+            if ( node.length === 1 ) {
+                do {
+                    parent = node.parentNode;
+                    parent.removeChild( node );
+                    node = parent;
+                } while ( isInline( node ) && !getLength( node ) );
+                break;
+            } else {
+                node.deleteData( index, 1 );
+            }
         }
     }
 };
@@ -1713,7 +1724,7 @@ proto._addFormat = function ( tag, attributes, range ) {
     // If the range is collapsed we simply insert the node by wrapping
     // it round the range and focus it.
     var el, walker, startContainer, endContainer, startOffset, endOffset,
-        textNode, needsFormat;
+        node, needsFormat;
 
     if ( range.collapsed ) {
         el = fixCursor( this.createElement( tag, attributes ) );
@@ -1725,16 +1736,21 @@ proto._addFormat = function ( tag, attributes, range ) {
     // partially selected nodes) and if they're not already formatted
     // correctly we wrap them in the appropriate tag.
     else {
-        // We don't want to apply formatting twice so we check each text
-        // node to see if it has an ancestor with the formatting already.
         // Create an iterator to walk over all the text nodes under this
         // ancestor which are in the range and not already formatted
         // correctly.
+        //
+        // In Blink/WebKit, empty blocks may have no text nodes, just a <br>.
+        // Therefore we wrap this in the tag as well, as this will then cause it
+        // to apply when the user types something in the block, which is
+        // presumably what was intended.
         walker = new TreeWalker(
             range.commonAncestorContainer,
-            SHOW_TEXT,
+            SHOW_TEXT|SHOW_ELEMENT,
             function ( node ) {
-                return isNodeContainedInRange( range, node, true );
+                return ( node.nodeType === TEXT_NODE ||
+                                                    node.nodeName === 'BR' ) &&
+                    isNodeContainedInRange( range, node, true );
             },
             false
         );
@@ -1746,49 +1762,53 @@ proto._addFormat = function ( tag, attributes, range ) {
         endContainer = range.endContainer;
         endOffset = range.endOffset;
 
-        // Make sure we start inside a text node.
+        // Make sure we start with a valid node.
         walker.currentNode = startContainer;
-        if ( startContainer.nodeType !== TEXT_NODE ) {
-            var nextNode = walker.nextNode();
+        if ( !walker.filter( startContainer ) ) {
+            startContainer = walker.nextNode();
+            startOffset = 0;
+        }
 
-            if ( nextNode ) {
-                startContainer = nextNode;
-                startOffset = 0;
-            }
+        // If there are no interesting nodes in the selection, abort
+        if ( !startContainer ) {
+            return range;
         }
 
         do {
-            textNode = walker.currentNode;
-            if ( !textNode ) {
-                continue;
-            }
-            
-            needsFormat = !getNearest( textNode, tag, attributes );
+            node = walker.currentNode;
+            needsFormat = !getNearest( node, tag, attributes );
             if ( needsFormat ) {
-                if ( textNode === endContainer &&
-                        textNode.length > endOffset ) {
-                    textNode.splitText( endOffset );
+                // <br> can never be a container node, so must have a text node
+                // if node == (end|start)Container
+                if ( node === endContainer && node.length > endOffset ) {
+                    node.splitText( endOffset );
                 }
-                if ( textNode === startContainer && startOffset ) {
-                    textNode = textNode.splitText( startOffset );
+                if ( node === startContainer && startOffset ) {
+                    node = node.splitText( startOffset );
                     if ( endContainer === startContainer ) {
-                        endContainer = textNode;
+                        endContainer = node;
                         endOffset -= startOffset;
                     }
-                    startContainer = textNode;
+                    startContainer = node;
                     startOffset = 0;
                 }
                 el = this.createElement( tag, attributes );
-                replaceWith( textNode, el );
-                el.appendChild( textNode );
+                replaceWith( node, el );
+                el.appendChild( node );
             }
         } while ( walker.nextNode() );
 
-        // Make sure we finish inside a text node. Otherwise offset may have
-        // changed.
+        // If we don't finish inside a text node, offset may have changed.
         if ( endContainer.nodeType !== TEXT_NODE ) {
-            endContainer = textNode;
-            endOffset = textNode.length;
+            if ( node.nodeType === TEXT_NODE ) {
+                endContainer = node;
+                endOffset = node.length;
+            } else {
+                // If <br>, we must have just wrapped it, so it must have only
+                // one child
+                endContainer = node.parentNode;
+                endOffset = 1;
+            }
         }
 
         // Now set the selection to as it was before
@@ -2890,10 +2910,12 @@ var keyHandlers = {
             // Don't continue links over a block break; unlikely to be the
             // desired outcome.
             if ( nodeAfterSplit.nodeName === 'A' &&
-                    !nodeAfterSplit.textContent ) {
-                replaceWith( nodeAfterSplit, empty( nodeAfterSplit ) );
+                    ( !nodeAfterSplit.textContent ||
+                        nodeAfterSplit.textContent === ZWS ) ) {
+                child = self._doc.createTextNode( '' );
+                replaceWith( nodeAfterSplit, child );
                 nodeAfterSplit = child;
-                continue;
+                break;
             }
 
             while ( child && child.nodeType === TEXT_NODE && !child.data ) {
