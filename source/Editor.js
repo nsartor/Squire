@@ -2271,9 +2271,11 @@ proto.insertImage = function ( src ) {
     return img;
 };
 
+// Insert HTML at the cursor location. If the selection is not collapsed
+// insertTreeFragmentIntoRange will delete the selection so that it is replaced
+// by the html being inserted.
 proto.insertHTML = function ( html ) {
-    var self = this,
-        range = this.getSelection(),
+    var range = this.getSelection(),
         frag = this._doc.createDocumentFragment(),
         div = this.createElement( 'DIV' );
 
@@ -2282,9 +2284,8 @@ proto.insertHTML = function ( html ) {
     frag.appendChild( empty( div ) );
 
     // Record undo checkpoint
-    self._recordUndoState( range );
-    self._getRangeAndRemoveBookmark( range );
-
+    this._recordUndoState( range );
+    this._getRangeAndRemoveBookmark( range );
 
     try {
         frag.normalize();
@@ -2301,17 +2302,17 @@ proto.insertHTML = function ( html ) {
 
         insertTreeFragmentIntoRange( range, frag );
         if ( !canObserveMutations ) {
-            self._docWasChanged();
+            this._docWasChanged();
         }
         range.collapse( false );
-        self._ensureBottomLine();
+        this._ensureBottomLine();
 
-        self.setSelection( range );
-        self._updatePath( range, true );
-
+        this.setSelection( range );
+        this._updatePath( range, true );
     } catch ( error ) {
-        self.didError( error );
+        this.didError( error );
     }
+    return this;
 };
 
 // --- Formatting ---
